@@ -6,16 +6,15 @@ load_dotenv()
 
 class Config:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-    
-    # UPDATED: Use currently supported Groq models
-    GROQ_MODEL = "llama-3.3-70b-versatile"  # Latest 70B model
-    # Fallback options if needed:
-    # GROQ_MODEL = "llama-3.1-8b-instant"  # Faster, cheaper
-    # GROQ_MODEL = "mixtral-8x7b-32768"    # Alternative
-    
+    GROQ_MODEL = "llama-3.3-70b-versatile"  # Current stable model
     VECTOR_DB_PATH = "./chroma_db"
-    AUDIT_DB_PATH = "./audit_logs.db"
     
-    # Brand Guidelines
-    BRAND_VOICE = "Professional, Concise, Data-Driven, Compliant with SEBI regulations."
-    PROHIBITED_TERMS = ["guaranteed returns", "risk-free", "100% profit", "assured", "no risk"]
+    # Industry Agnostic Settings
+    # These are defaults, but the system should rely on Vector Store for specific rules
+    DEFAULT_GUIDELINES = [
+        "Maintain professional tone suitable for enterprise communication.",
+        "Avoid sensitive data leakage (PII, passwords, internal secrets).",
+        "Ensure content is inclusive and non-discriminatory.",
+        "Adhere to local regulatory requirements for the target region.",
+        "Verify facts before making claims about product capabilities."
+    ]

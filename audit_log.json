@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-03-29T04:10:18.267567",
+    "agent": "DraftingAgent",
+    "action": "Generated Draft",
+    "details": "Length: 1646 chars"
+  },
+  {
+    "timestamp": "2026-03-29T04:10:19.686108",
+    "agent": "ComplianceAgent",
+    "action": "Compliance Check",
+    "details": "Result: True, Risk: LOW"
+  },
+  {
+    "timestamp": "2026-03-29T04:10:21.834874",
+    "agent": "LocalizationAgent",
+    "action": "Localized Content",
+    "details": "Region: India"
+  }
+]
