@@ -25,6 +25,21 @@ def get_audit_db():
 app = get_workflow_app()
 db = get_audit_db()
 
+
+def _normalize_state_entry(entry):
+    """Normalize langgraph stream output to a plain dict for display."""
+    # Unwrap tuples/lists
+    if isinstance(entry, (list, tuple)) and len(entry) > 0:
+        entry = entry[0]
+    # If mapping of node_name -> state
+    if isinstance(entry, dict):
+        # If values are dicts, take the first
+        if entry and all(isinstance(v, dict) for v in entry.values()):
+            return list(entry.values())[0]
+        return entry
+    # Anything else
+    return {}
+
 # --- SESSION STATE ---
 st.session_state.setdefault("session_id", str(uuid.uuid4()))
 st.session_state.setdefault("workflow_state", None)
@@ -89,8 +104,12 @@ if st.session_state.page == "create":
             uploaded_file = st.file_uploader("Upload (TXT/PDF)", type=["txt", "pdf"])
             if uploaded_file:
                 input_file = uploaded_file.name
-                raw_content = extract_text_from_file(uploaded_file)
-                st.success(f"✓ Loaded {len(raw_content)} characters")
+                try:
+                    raw_content = extract_text_from_file(uploaded_file)
+                    st.success(f"✓ Loaded {len(raw_content)} characters")
+                except Exception as e:
+                    st.error(f"Could not read file: {e}")
+                    raw_content = ""
             else:
                 raw_content = ""
                 input_file = ""
@@ -140,17 +159,19 @@ if st.session_state.page == "create":
             try:
                 db.create_session(st.session_state.session_id, topic, channel, region, content_type)
                 
-                # Run workflow
-                for step, state_dict in enumerate(app.stream(initial_state, {"recursion_limit": 25})):
-                    st.session_state.workflow_state = state_dict
-                    step_name = list(state_dict.keys())[0] if state_dict else "step"
+                # Run workflow with a stable thread_id for the checkpointer
+                run_config = {"recursion_limit": 25, "configurable": {"thread_id": st.session_state.session_id}}
+                for step, state_dict in enumerate(app.stream(initial_state, run_config)):
+                    normalized = _normalize_state_entry(state_dict)
+                    st.session_state.workflow_state = normalized
+                    step_name = list(normalized.keys())[0] if isinstance(normalized, dict) and normalized else "step"
                     st.write(f"✓ {step_name}")
                 
                 st.success("✅ Processing complete!")
                 
-                # Display results
+                # Display results (handle tuple or dict from stream)
                 if st.session_state.workflow_state:
-                    state_data = list(st.session_state.workflow_state.values())[0] if st.session_state.workflow_state else {}
+                    state_data = _normalize_state_entry(st.session_state.workflow_state)
                     
                     col1, col2 = st.columns(2)
                     with col1:

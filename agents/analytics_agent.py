@@ -8,6 +8,7 @@ Analytics Agent: Tracks engagement metrics, analyzes content performance, and pr
 """
 
 from services.database import audit_db
+from services.integrations import fetch_engagement_via_n8n
 from datetime import datetime
 import random  # Mock data for now
 import json
@@ -26,9 +27,16 @@ def analytics_agent(state):
     
     print(f"📈 Analyzing: Session={session_id}, Channel={channel}")
     
-    # Simulate collecting engagement data (in production, call real APIs)
-    engagement_data = simulate_engagement_collection(session_id, channel, content)
-    print(f"   ✓ Engagement data: {engagement_data['views']} views, {engagement_data['engagements']} engagements")
+    # Try fetching real engagement via n8n; fallback to simulation
+    publish_results = state.get("publish_results", [])
+    n8n_engagement = fetch_engagement_via_n8n(session_id, publish_results, channel)
+    if n8n_engagement and n8n_engagement.get("status") == "success":
+        engagement_payload = n8n_engagement.get("data", {})
+        engagement_data = engagement_payload.get("engagement", engagement_payload)
+        print(f"   ✓ Engagement data (n8n): {engagement_data}")
+    else:
+        engagement_data = simulate_engagement_collection(session_id, channel, content)
+        print(f"   ✓ Engagement data (simulated): {engagement_data['views']} views, {engagement_data['engagements']} engagements")
     
     # Analyze performance
     analysis = analyze_performance(engagement_data, content)
@@ -61,8 +69,9 @@ def analytics_agent(state):
     for metric_name, metric_value in metrics.items():
         audit_db.log_metric(session_id, metric_name, metric_value, {"channel": channel})
     
-    # Return updated state with analytics
+    # Return updated state merged with previous state to avoid dropping keys
     return {
+        **state,
         "engagement_metrics": engagement_data,
         "performance_analysis": analysis,
         "insights": insights,

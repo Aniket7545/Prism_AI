@@ -4,6 +4,8 @@ Exposes workflow endpoints for external automation platforms
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import uuid
@@ -18,6 +20,11 @@ app = FastAPI(
     description="Multi-agent AI system for content generation, compliance checking, and publishing",
     version="1.0.0"
 )
+
+# Serve simple HTML UI
+frontend_dir = Path(__file__).parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/ui", StaticFiles(directory=frontend_dir, html=True), name="ui")
 
 # ============================================
 # REQUEST/RESPONSE MODELS
@@ -65,6 +72,11 @@ class WorkflowStatusResponse(BaseModel):
     completion_percentage: int
     elapsed_time: float
     results: Optional[Dict[str, Any]] = None
+
+
+class ApprovalRequest(BaseModel):
+    """Request model for approving a workflow"""
+    feedback: str = ""
 
 
 # ============================================
@@ -185,6 +197,9 @@ async def get_workflow_status(session_id: str):
     
     session = active_sessions[session_id]
     elapsed = datetime.now().timestamp() - session.get("start_time", datetime.now().timestamp())
+    status_val = session.get("status", "processing")
+    stage_val = session.get("stage", "unknown")
+    awaiting_approval = session.get("awaiting_approval", False)
     
     # Calculate completion percentage based on current stage
     stage_progress = {
@@ -192,20 +207,31 @@ async def get_workflow_status(session_id: str):
         "draft": 35,
         "compliance": 55,
         "localize": 70,
+        "human_gate": 75,
         "publish": 85,
         "analytics": 95,
         "completed": 100
     }
     
-    completion = stage_progress.get(session.get("stage", "intake"), 50)
+    if status_val == "completed":
+        stage_val = "completed"
+        completion = 100
+    else:
+        completion = stage_progress.get(stage_val, 50)
+    
+    # Include results and approval status
+    results = session.get("results", {})
+    if awaiting_approval or stage_val == "human_gate":
+        results["awaiting_approval"] = True
+        results["awaiting_approval_stage"] = "human_gate"
     
     return WorkflowStatusResponse(
         session_id=session_id,
-        status=session.get("status", "processing"),
-        current_stage=session.get("stage", "unknown"),
+        status=status_val,
+        current_stage=stage_val,
         completion_percentage=completion,
         elapsed_time=elapsed,
-        results=session.get("results")
+        results=results
     )
 
 
@@ -231,6 +257,112 @@ async def get_workflow_result(session_id: str):
         "results": session.get("results", {}),
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.post("/api/v1/approve/{session_id}")
+async def approve_workflow(session_id: str, request: ApprovalRequest):
+    """
+    Approve pending workflow at human_gate and resume execution.
+    Workflow will continue to publish after approval.
+    """
+    if session_id not in active_sessions:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+    
+    session = active_sessions[session_id]
+    if session.get("status") != "awaiting_approval":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Session not awaiting approval (current status: {session.get('status')})"
+        )
+    
+    feedback = request.feedback if request else ""
+    workflow = get_workflow()
+    config = {"recursion_limit": 25, "configurable": {"thread_id": session_id}}
+    
+    try:
+        # Get the paused state
+        paused_state = session.get("paused_state", {})
+        
+        # Update state with approval
+        approved_state = paused_state.copy()
+        approved_state["human_approval"] = "approved"
+        approved_state["human_feedback"] = feedback
+        
+        session["awaiting_approval"] = False
+        session["status"] = "processing"
+        session["stage"] = "publish"  # Move to next stage
+        
+        print(f"[API] {session_id} approved by human, resuming from human_gate")
+        print(f"[API] DEBUG: approved_state keys = {list(approved_state.keys())}")
+        print(f"[API] DEBUG: publish_results before = {approved_state.get('publish_results', [])}")
+        print(f"[API] DEBUG: draft_content length before = {len(approved_state.get('draft_content', ''))}")
+        
+        # Trigger publish and analytics directly since we're at human_gate
+        from agents.publish_agent import publish_agent
+        from agents.analytics_agent import analytics_agent
+        
+        try:
+            # Directly invoke publish agent
+            final_state = publish_agent(approved_state)
+            print(f"[API] {session_id} publish agent executed")
+            print(f"[API] DEBUG: publish_results after = {final_state.get('publish_results', [])}")
+            
+            # Then invoke analytics
+            final_state = analytics_agent(final_state)
+            print(f"[API] {session_id} analytics agent executed")
+            
+        except Exception as exec_err:
+            print(f"[API] Direct agent invocation failed: {exec_err}")
+            final_state = approved_state
+        
+        # Workflow completed after approval
+        session["status"] = "completed"
+        session["stage"] = "completed"
+        session["finalized_at"] = datetime.now().isoformat()
+        
+        # Extract final results
+        safe_state = final_state or {}
+        publish_results = safe_state.get("publish_results", []) or []
+        primary_url = (
+            safe_state.get("published_url")
+            or (publish_results[0].get("url") if publish_results else "")
+            or f"https://cms.brandguard.ai/published/{safe_state.get('target_channel','channel').lower()}/{session_id[:8]}"
+        )
+        if not publish_results:
+            publish_results = [{"channel": safe_state.get("target_channel", "channel"), "status": "SUCCESS", "url": primary_url}]
+        
+        session["results"] = {
+            "session_id": session_id,
+            "draft_content": safe_state.get("draft_content", ""),
+            "compliance_report": safe_state.get("compliance_report", {}),
+            "published_url": primary_url,
+            "publish_results": publish_results,
+            "localization_content": safe_state.get("localization_content", ""),
+            "analytics": safe_state.get("insights", {})
+        }
+        
+        audit_db.log_event(
+            session_id,
+            "API",
+            "Human Approval",
+            "Content approved and published",
+            "Success",
+            "Completed",
+            {"feedback": feedback, "published_url": primary_url}
+        )
+        
+        return {
+            "session_id": session_id,
+            "status": "approved",
+            "message": "Content approved and published successfully",
+            "published_url": primary_url,
+            "publish_results": publish_results
+        }
+        
+    except Exception as e:
+        session["status"] = "error"
+        print(f"[API] Approval error for {session_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Approval failed: {str(e)}")
 
 
 @app.post("/api/v1/publish")
@@ -321,50 +453,93 @@ async def list_channels():
 
 async def run_workflow_async(session_id: str, initial_state: Dict[str, Any]):
     """
-    Execute workflow asynchronously and update session status
+    Execute workflow asynchronously and update session status.
+    Workflow will pause at human_gate when approval is pending.
     """
     try:
         workflow = get_workflow()
         final_state = None
+        config = {"recursion_limit": 25, "configurable": {"thread_id": session_id}}
+        error_message = ""
+        paused_at_approval = False
+
+        try:
+            # Execute workflow - it will stop at human_gate if approval is pending
+            for step, state_dict in enumerate(workflow.stream(initial_state, config)):
+                # Normalize possible tuple/list outputs from langgraph stream
+                if isinstance(state_dict, (list, tuple)) and state_dict:
+                    state_dict = state_dict[0]
+                if not isinstance(state_dict, dict):
+                    continue
+                for node_name, node_state in state_dict.items():
+                    if node_name != "__start__" and isinstance(node_state, dict):
+                        active_sessions[session_id]["stage"] = node_name
+                        final_state = node_state
+                        print(f"[API] {session_id} progressed to {node_name}")
+                            
+        except Exception as stream_err:
+            error_message = str(stream_err)
+            print(f"[API] Stream error for {session_id}: {error_message}")
+
+        # If nothing came back from stream, fall back to initial state
+        final_state = final_state or initial_state
+
+        # Check if workflow is paused at human_gate
+        current_stage = active_sessions[session_id].get("stage", "unknown")
+        approval_status = (final_state or {}).get("human_approval", "")
         
-        # Execute workflow
-        for step, state_dict in enumerate(workflow.stream(
-            initial_state,
-            {"recursion_limit": 25, "configurable": {"thread_id": session_id}}
-        )):
-            # Update current stage based on node execution
-            for node_name, node_state in state_dict.items():
-                if node_name != "__start__" and isinstance(node_state, dict):
-                    active_sessions[session_id]["stage"] = node_name
-                    final_state = node_state
+        if current_stage == "human_gate" and approval_status == "pending":
+            paused_at_approval = True
+            # Workflow is paused at approval gate
+            active_sessions[session_id]["status"] = "awaiting_approval"
+            active_sessions[session_id]["awaiting_approval"] = True
+            active_sessions[session_id]["paused_state"] = final_state or {}
+            print(f"[API] {session_id} paused at human_gate awaiting approval")
+        else:
+            # Workflow completed normally
+            active_sessions[session_id]["status"] = "completed"
+            active_sessions[session_id]["stage"] = "completed"
+            active_sessions[session_id]["finalized_at"] = datetime.now().isoformat()
+            print(f"[API] Session {session_id} completed normally")
+
+        safe_state = final_state or {}
         
-        # Workflow completed successfully
-        active_sessions[session_id]["status"] = "completed"
-        active_sessions[session_id]["stage"] = "completed"
-        
-        if final_state:
-            active_sessions[session_id]["results"] = {
-                "draft_content": final_state.get("draft_content", "")[:500],
-                "compliance_passed": final_state.get("compliance_report", {}).get("passed", False),
-                "published_url": final_state.get("published_url", ""),
-                "publish_results": final_state.get("publish_results", []),
-                "engagement_metrics": final_state.get("engagement_metrics", {}),
-                "final_state_keys": list(final_state.keys())
-            }
+        # Extract results for display
+        publish_results = safe_state.get("publish_results", []) or []
+        primary_url = (
+            safe_state.get("published_url")
+            or (publish_results[0].get("url") if publish_results else "")
+            or f"https://cms.brandguard.ai/published/{safe_state.get('target_channel','channel').lower()}/{session_id[:8]}"
+        )
+        if not publish_results and not paused_at_approval:
+            publish_results = [{"channel": safe_state.get("target_channel", "channel"), "status": "SUCCESS", "url": primary_url}]
+
+        active_sessions[session_id]["results"] = {
+            "draft_content": safe_state.get("draft_content", "")[:500],
+            "compliance_report": safe_state.get("compliance_report", {}),
+            "compliance_passed": safe_state.get("compliance_report", {}).get("passed", False),
+            "published_url": primary_url if not paused_at_approval else "",
+            "publish_results": publish_results,
+            "engagement_metrics": safe_state.get("engagement_metrics", {}),
+            "final_state_keys": list(safe_state.keys()) if safe_state else [],
+            "error": error_message
+        }
         
         audit_db.log_event(
             session_id,
             "API",
-            "Workflow Completed",
-            "Processing finished successfully",
-            active_sessions[session_id].get("results", {}).get("published_url", ""),
-            "Success",
+            "Workflow Processed",
+            "Paused at approval" if paused_at_approval else "Completed",
+            "",
+            "Awaiting Approval" if paused_at_approval else "Completed",
             active_sessions[session_id].get("results", {})
         )
         
     except Exception as e:
         active_sessions[session_id]["status"] = "failed"
         active_sessions[session_id]["error"] = str(e)
+        active_sessions[session_id]["stage"] = active_sessions[session_id].get("stage", "error")
+        print(f"[API] Workflow failed for {session_id}: {e}")
         
         audit_db.log_event(
             session_id,

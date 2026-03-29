@@ -9,6 +9,7 @@ from agents.publish_agent import publish_agent
 from agents.analytics_agent import analytics_agent
 from services.database import audit_db
 from langgraph.checkpoint.memory import MemorySaver
+import time
 
 def create_workflow():
     workflow = StateGraph(ContentState)
@@ -21,17 +22,32 @@ def create_workflow():
     workflow.add_node("publish", publish_agent)
     workflow.add_node("analytics", analytics_agent)
     
-    # Human gate node
+    # Human gate node - waits for approval before proceeding
     def human_gate(state):
+        """
+        Log the approval request and signal to pause execution.
+        The workflow will remain at this node until manually approved via API.
+        """
+        approval_status = state.get("human_approval", "pending")
+        session_id = state.get("session_id", "unknown")
+        print(f"\n[WORKFLOW] {session_id} reached HUMAN_GATE with approval_status='{approval_status}'")
+        
         audit_db.log_event(
             state["session_id"], 
             "System", 
             "Human Gate", 
-            f"Approval: {state.get('human_approval', 'pending')}", 
-            "Pending", 
+            f"Approval: {approval_status}", 
+            "Awaiting" if approval_status == "pending" else approval_status, 
             "Paused", 
-            {"iteration": state.get("iteration_count", 0)}
+            {
+                "category": state.get("compliance_report", {}).get("category", "general"),
+                "risk_level": state.get("compliance_report", {}).get("risk_level", "low"),
+                "issues": len(state.get("compliance_report", {}).get("issues", []))
+            }
         )
+        
+        # If still pending, return state unchanged (will trigger conditional routing)
+        # The conditional will keep workflow paused at this node until approval
         return state
     
     workflow.add_node("human_gate", human_gate)
@@ -55,22 +71,34 @@ def create_workflow():
     workflow.add_edge("localize", "human_gate")
     
     def route_after_human(state):
+        """
+        Route based on human approval decision.
+        If pending, exit workflow to pause execution.
+        """
+        session_id = state.get("session_id", "unknown")
         approval = state.get("human_approval", "")
         
+        print(f"[WORKFLOW] {session_id} route_after_human called with approval='{approval}'")
+        
         if approval == "approved":
+            print(f"[WORKFLOW] {session_id} approval=approved -> routing to 'publish'")
             return "publish"
         elif approval == "rejected":
-            # Reset needs_revision for the new draft cycle
+            # Reset for new draft cycle
+            state["needs_revision"] = True
+            state["iteration_count"] = state.get("iteration_count", 0) + 1
+            print(f"[WORKFLOW] {session_id} approval=rejected -> routing to 'draft'")
             return "draft"
         else:
-            # Stay at human_gate if no decision yet
-            return "human_gate"
+            # Pending approval - exit workflow to pause
+            print(f"[WORKFLOW] {session_id} approval not approved/rejected ('{approval}') -> returning END to pause workflow")
+            return END
     
     workflow.add_conditional_edges("human_gate", route_after_human)
     workflow.add_edge("publish", "analytics")
     workflow.add_edge("analytics", END)
     
-    # Compile with memory
+    # Compile with memory checkpointer
     memory = MemorySaver()
-    app = workflow.compile(checkpointer=memory, interrupt_before=["human_gate"])
+    app = workflow.compile(checkpointer=memory)
     return app

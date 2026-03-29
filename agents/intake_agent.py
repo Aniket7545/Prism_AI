@@ -19,7 +19,7 @@ def intake_agent(state):
     Process raw input and structure it for the workflow.
     """
     print("\n" + "="*60)
-    print("📥 INTAKE AGENT - Content Parsing & Structuring")
+    print("INTAKE AGENT - Content Parsing & Structuring")
     print("="*60)
     
     session_id = state.get("session_id", "unknown")
@@ -29,24 +29,24 @@ def intake_agent(state):
     channel = state.get("target_channel", "")
     region = state.get("target_region", "")
     
-    print(f"📋 Input: File='{input_file}', Topic='{topic}', Channel='{channel}'")
+    print(f"[INPUT] File='{input_file}', Topic='{topic}', Channel='{channel}'")
     
     # Step 1: Detect content type
     content_type = detect_content_type(raw_content, channel)
-    print(f"   ✓ Detected content type: {content_type}")
+    print(f"   [OK] Detected content type: {content_type}")
     
     # Step 2: Extract metadata
     metadata = extract_metadata(raw_content, topic)
-    print(f"   ✓ Extracted metadata: {metadata}")
+    print(f"   [OK] Extracted metadata: {metadata}")
     
     # Step 3: Clean and normalize content
     normalized_content = normalize_content(raw_content, content_type)
-    print(f"   ✓ Content normalized: {len(normalized_content)} characters")
+    print(f"   [OK] Content normalized: {len(normalized_content)} characters")
     
     # Step 4: Use LLM to structure content
     try:
         structured_data = llm_structure_content(normalized_content, topic, content_type, channel)
-        print(f"   ✓ LLM structured content: {list(structured_data.keys())}")
+        print(f"   [OK] LLM structured content: {list(structured_data.keys())}")
     except Exception as e:
         print(f"   ⚠️  LLM structuring failed: {e}")
         structured_data = {
@@ -58,7 +58,7 @@ def intake_agent(state):
     
     # Step 5: Validation
     is_valid, validation_errors = validate_content(normalized_content, content_type)
-    print(f"   {'✓' if is_valid else '❌'} Validation: {'PASS' if is_valid else f'FAIL - {len(validation_errors)} errors'}")
+    print(f"   {'[OK]' if is_valid else '[FAIL]'} Validation: {'PASS' if is_valid else f'FAIL - {len(validation_errors)} errors'}")
     
     # Audit logging
     audit_db.log_event(
