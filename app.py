@@ -1,4 +1,4 @@
-# app.py - Multi-page Streamlit Application for BrandGuard AI
+# app.py - Multi-page Streamlit Application for Prism AI
 import streamlit as st
 import os, uuid, time, json
 from datetime import datetime
@@ -9,7 +9,7 @@ import pandas as pd
 
 # --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="BrandGuard AI - Enterprise Content Operations",
+    page_title="Prism AI - Enterprise Content Operations",
     layout="wide", initial_sidebar_state="expanded"
 )
 
@@ -45,7 +45,7 @@ st.session_state.setdefault("session_id", str(uuid.uuid4()))
 st.session_state.setdefault("workflow_state", None)
 st.session_state.setdefault("page", "create")
 
-st.title("🤖 BrandGuard AI - Enterprise Content Operations")
+st.title("🤖 Prism AI - Enterprise Content Operations")
 st.markdown("**AI-Powered Content Automation with Compliance Guardrails**")
 
 # --- SIDEBAR NAVIGATION ---

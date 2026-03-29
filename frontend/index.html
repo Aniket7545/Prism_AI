@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrandGuard AI — Enterprise Content Operations</title>
+  <title>Prism AI — Enterprise Content Operations</title>
   <style>
     :root {
       --primary: #06b6d4;
@@ -213,12 +213,216 @@
 <body>
   <header>
     <div class="container">
-      <h1>🤖 BrandGuard AI</h1>
-      <p class="subtitle">Enterprise Content Operations — Draft → Compliance → Approval → Publish → Analytics</p>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h1>🤖 Prism AI</h1>
+          <p class="subtitle">Enterprise Content Operations — Draft → Compliance → Approval → Publish → Analytics</p>
+        </div>
+        <div class="nav-tabs">
+          <button class="tab-btn active" data-tab="workflow">
+            <span style="font-size: 16px; margin-right: 8px;">▶</span>Workflow
+          </button>
+          <button class="tab-btn" data-tab="analytics">
+            <span style="font-size: 16px; margin-right: 8px;">📊</span>Analytics
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
+  <style>
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .tab-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(30, 41, 59, 0.6);
+      color: #cbd5e1;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .tab-btn:hover {
+      background: rgba(30, 41, 59, 0.9);
+      border-color: var(--primary);
+    }
+    
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(99, 102, 241, 0.2));
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .analytics-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+    
+    .metric-card {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      backdrop-filter: blur(8px);
+      text-align: center;
+    }
+    
+    .metric-card .label {
+      font-size: 12px;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    
+    .metric-card .number {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+    
+    .metric-card .detail {
+      font-size: 11px;
+      color: #64748b;
+    }
+    
+    .analytics-table {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      backdrop-filter: blur(8px);
+      overflow-x: auto;
+    }
+    
+    .analytics-table h3 {
+      font-size: 14px;
+      color: var(--primary);
+      margin-bottom: 15px;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    
+    thead {
+      border-bottom: 1px solid var(--border);
+    }
+    
+    th {
+      padding: 12px;
+      text-align: left;
+      color: #cbd5e1;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+    
+    td {
+      padding: 12px;
+      border-top: 1px solid rgba(30, 41, 59, 0.5);
+      color: var(--text);
+    }
+    
+    tbody tr:hover {
+      background: rgba(6, 182, 212, 0.05);
+    }
+    
+    .topic-cell {
+      max-width: 250px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+    }
+    
+    .metric-cell {
+      text-align: center;
+      font-weight: 600;
+    }
+    
+    .engagement-bar {
+      display: inline-block;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      border-radius: 2px;
+      margin-left: 8px;
+    }
+    
+    .insights-box {
+      background: rgba(30, 41, 59, 0.8);
+      border-left: 3px solid var(--primary);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+    }
+    
+    .insights-box h4 {
+      color: var(--primary);
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+    
+    .insight-item {
+      padding: 8px 0;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    
+    .insight-item:before {
+      content: "→ ";
+      color: var(--primary);
+      font-weight: 600;
+    }
+    
+    .loading-state {
+      text-align: center;
+      padding: 40px;
+      color: #cbd5e1;
+    }
+    
+    .loading-state .spinner {
+      display: inline-block;
+      width: 30px;
+      height: 30px;
+      border: 3px solid rgba(6, 182, 212, 0.3);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 15px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+
   <div class="container">
+    <!-- WORKFLOW TAB -->
+    <div id="workflow" class="tab-content active">
     <div class="main-grid">
       <!-- Input Form -->
       <div class="card">
@@ -304,11 +508,193 @@
       <h3>📋 Activity Log</h3>
       <div class="mono" id="progress-log" style="min-height: 150px;"></div>
     </div>
+    </div><!-- END WORKFLOW TAB -->
+
+    <!-- ANALYTICS TAB -->
+    <div id="analytics" class="tab-content">
+      <!-- Summary Cards -->
+      <div class="analytics-summary" id="analytics-summary">
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading engagement data...</p>
+        </div>
+      </div>
+
+      <!-- Performance Table -->
+      <div class="analytics-table">
+        <h3>📊 Content Performance (Last 30 Days)</h3>
+        <table id="analytics-table">
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th style="text-align: center;">Views</th>
+              <th style="text-align: center;">👍 Likes</th>
+              <th style="text-align: center;">💬 Comments</th>
+              <th style="text-align: center;">🔄 Shares</th>
+              <th style="text-align: center;">Total</th>
+              <th style="text-align: center;">Engagement</th>
+            </tr>
+          </thead>
+          <tbody id="analytics-tbody">
+            <tr>
+              <td colspan="7" style="text-align: center; color: #cbd5e1;">
+                <div class="loading-state" style="padding: 20px;">
+                  <div class="spinner"></div>
+                  <p>Loading content data...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div class="insights-box" id="insights-box" style="display: none;">
+          <h4>💡 Key Insights</h4>
+          <div id="insights-list"></div>
+        </div>
+      </div>
+    </div><!-- END ANALYTICS TAB -->
   </div>
 
   <script>
     const apiBase = window.location.origin;
     let currentSessionId = null;
+
+    // TAB NAVIGATION
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const tabName = this.dataset.tab;
+        
+        // Update active states
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        
+        this.classList.add('active');
+        document.getElementById(tabName).classList.add('active');
+        
+        // Load analytics data when switching to analytics tab
+        if (tabName === 'analytics') {
+          loadAnalytics();
+        }
+      });
+    });
+
+    // ANALYTICS FUNCTIONS
+    async function loadAnalytics() {
+      try {
+        const response = await fetch(apiBase + '/api/v1/engagement/report?days=30');
+        if (!response.ok) throw new Error('Failed to load engagement data');
+        
+        const data = await response.json();
+        displayAnalytics(data);
+      } catch (error) {
+        console.error('Analytics error:', error);
+        document.getElementById('analytics-summary').innerHTML = 
+          `<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #ef4444;">Error loading analytics: ${error.message}</div>`;
+      }
+    }
+
+    function displayAnalytics(data) {
+      const { summary, content } = data;
+      
+      // Update summary cards
+      const summaryHtml = `
+        <div class="metric-card">
+          <div class="label">📝 Content Pieces</div>
+          <div class="number">${summary.total_content_pieces}</div>
+          <div class="detail">published</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">👁️ Total Views</div>
+          <div class="number">${summary.total_views.toLocaleString()}</div>
+          <div class="detail">across all content</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">💬 Interactions</div>
+          <div class="number">${summary.total_interactions}</div>
+          <div class="detail">reactions, comments, shares</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">📈 Avg Engagement</div>
+          <div class="number">${summary.average_engagement_rate.toFixed(1)}%</div>
+          <div class="detail">engagement rate</div>
+        </div>
+      `;
+      
+      document.getElementById('analytics-summary').innerHTML = summaryHtml;
+      
+      // Update table
+      if (content.length === 0) {
+        document.getElementById('analytics-tbody').innerHTML = 
+          '<tr><td colspan="7" style="text-align: center; padding: 30px; color: #cbd5e1;">No published content found yet. Create and publish some content to see engagement metrics.</td></tr>';
+        document.getElementById('insights-box').style.display = 'none';
+      } else {
+        const tableHtml = content.map(item => {
+          const engagement = (item.engagement_rate * 100).toFixed(1);
+          const barWidth = Math.min(engagement * 3, 150);
+          return `
+            <tr>
+              <td class="topic-cell" title="${item.topic}">${item.topic || 'Untitled'}</td>
+              <td class="metric-cell">${item.views}</td>
+              <td class="metric-cell">${item.reactions}</td>
+              <td class="metric-cell">${item.comments}</td>
+              <td class="metric-cell">${item.shares}</td>
+              <td class="metric-cell" style="font-weight: 700; color: var(--primary);">${item.total_interactions}</td>
+              <td class="metric-cell">${engagement}%<div class="engagement-bar" style="width: ${barWidth}px;"></div></td>
+            </tr>
+          `;
+        }).join('');
+        
+        document.getElementById('analytics-tbody').innerHTML = tableHtml;
+        
+        // Generate insights
+        const insights = generateInsights(content, summary);
+        if (insights.length > 0) {
+          const insightsHtml = insights.map(insight => 
+            `<div class="insight-item">${insight}</div>`
+          ).join('');
+          document.getElementById('insights-list').innerHTML = insightsHtml;
+          document.getElementById('insights-box').style.display = 'block';
+        }
+      }
+    }
+
+    function generateInsights(content, summary) {
+      const insights = [];
+      
+      if (content.length === 0) return insights;
+      
+      // Best performer
+      const best = content[0];
+      if (best.total_interactions > 0) {
+        insights.push(`🏆 Top performer: "<strong>${best.topic.substring(0, 50)}</strong>" with ${best.total_interactions} interactions`);
+      }
+      
+      // Overall engagement
+      if (summary.total_views > 100) {
+        insights.push(`📖 Great reach: ${summary.total_views.toLocaleString()} total views across ${summary.total_content_pieces} pieces`);
+      }
+      
+      // Most discussed
+      const mostCommented = content.reduce((a, b) => a.comments > b.comments ? a : b);
+      if (mostCommented.comments > 0) {
+        insights.push(`💬 Strong discussion: "<strong>${mostCommented.topic.substring(0, 50)}</strong>" generated ${mostCommented.comments} comments`);
+      }
+      
+      // Engagement quality
+      if (summary.average_engagement_rate > 0.10) {
+        insights.push(`⚡ Excellent engagement: ${summary.average_engagement_rate.toFixed(1)}% average rate (industry benchmark: ~5%)`);
+      } else if (summary.average_engagement_rate > 0.05) {
+        insights.push(`📊 Good engagement: ${summary.average_engagement_rate.toFixed(1)}% average rate`);
+      }
+      
+      // Channel performance
+      if (content.length > 1) {
+        insights.push(`📈 Consistent publishing: ${content.length} pieces published, keeping audience engaged`);
+      }
+      
+      return insights;
+    }
+
 
     function log(msg) {
       const logEl = document.getElementById('progress-log');

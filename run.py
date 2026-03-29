@@ -14,7 +14,7 @@ from utils.loaders import extract_text_from_file
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run the BrandGuard AI workflow")
+    parser = argparse.ArgumentParser(description="Run the Prism AI workflow")
     parser.add_argument("--file", help="Path to input file (txt/pdf)")
     parser.add_argument("--content", help="Raw content string (overrides --file if set)")
     parser.add_argument("--topic", required=True, help="Content topic")

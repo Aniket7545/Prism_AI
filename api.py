@@ -1,5 +1,5 @@
 """
-REST API for BrandGuard AI - n8n Integration
+REST API for Prism AI - n8n Integration
 Exposes workflow endpoints for external automation platforms
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -16,7 +16,7 @@ from services.database import audit_db
 
 # Initialize FastAPI
 app = FastAPI(
-    title="BrandGuard AI - Enterprise Content Operations API",
+    title="Prism AI - Enterprise Content Operations API",
     description="Multi-agent AI system for content generation, compliance checking, and publishing",
     version="1.0.0"
 )
@@ -101,7 +101,7 @@ def get_workflow():
 @app.on_event("startup")
 async def startup_event():
     """Initialize workflow on startup"""
-    print("[API] BrandGuard AI API Starting...")
+    print("[API] Prism AI API Starting...")
     get_workflow()
     print("[API] Workflow initialized successfully")
 
@@ -111,7 +111,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "service": "BrandGuard AI Content Operations",
+        "service": "Prism AI Content Operations",
         "version": "1.0.0",
         "timestamp": datetime.now().isoformat()
     }
@@ -300,6 +300,7 @@ async def approve_workflow(session_id: str, request: ApprovalRequest):
         # Trigger publish and analytics directly since we're at human_gate
         from agents.publish_agent import publish_agent
         from agents.analytics_agent import analytics_agent
+        from agents.engagement_agent import engagement_agent
         
         try:
             # Directly invoke publish agent
@@ -310,6 +311,10 @@ async def approve_workflow(session_id: str, request: ApprovalRequest):
             # Then invoke analytics
             final_state = analytics_agent(final_state)
             print(f"[API] {session_id} analytics agent executed")
+            
+            # Finally invoke engagement tracking
+            final_state = engagement_agent(final_state)
+            print(f"[API] {session_id} engagement agent executed")
             
         except Exception as exec_err:
             print(f"[API] Direct agent invocation failed: {exec_err}")
@@ -326,7 +331,7 @@ async def approve_workflow(session_id: str, request: ApprovalRequest):
         primary_url = (
             safe_state.get("published_url")
             or (publish_results[0].get("url") if publish_results else "")
-            or f"https://cms.brandguard.ai/published/{safe_state.get('target_channel','channel').lower()}/{session_id[:8]}"
+            or f"https://cms.prism-ai.io/published/{safe_state.get('target_channel','channel').lower()}/{session_id[:8]}"
         )
         if not publish_results:
             publish_results = [{"channel": safe_state.get("target_channel", "channel"), "status": "SUCCESS", "url": primary_url}]
@@ -338,7 +343,9 @@ async def approve_workflow(session_id: str, request: ApprovalRequest):
             "published_url": primary_url,
             "publish_results": publish_results,
             "localization_content": safe_state.get("localization_content", ""),
-            "analytics": safe_state.get("insights", {})
+            "analytics": safe_state.get("insights", {}),
+            "engagement_metrics": safe_state.get("engagement_metrics", {}),
+            "engagement_insights": safe_state.get("engagement_insights", [])
         }
         
         audit_db.log_event(
@@ -447,6 +454,69 @@ async def list_channels():
     }
 
 
+@app.get("/api/v1/engagement/report")
+async def get_engagement_report(days: int = 7):
+    """
+    Get engagement report for all published content
+    Shows views, reactions, comments, shares for each published piece
+    """
+    try:
+        from services.engagement_analytics import get_all_published_content
+        
+        # Get content list (with timeout)
+        content_list = get_all_published_content(days=days)
+        
+        # Sort by total interactions
+        content_list.sort(key=lambda x: x.get("total_interactions", 0), reverse=True)
+        
+        # Calculate summary stats
+        total_views = sum(c.get("views", 0) for c in content_list)
+        total_interactions = sum(c.get("total_interactions", 0) for c in content_list)
+        avg_engagement = sum(c.get("engagement_rate", 0) for c in content_list) / len(content_list) if content_list else 0
+        
+        return {
+            "period": f"Last {days} days",
+            "timestamp": datetime.now().isoformat(),
+            "summary": {
+                "total_content_pieces": len(content_list),
+                "total_views": total_views,
+                "total_interactions": total_interactions,
+                "average_engagement_rate": round(avg_engagement * 100, 1),
+                "interactions_breakdown": {
+                    "total_reactions": sum(c.get("reactions", 0) for c in content_list),
+                    "total_comments": sum(c.get("comments", 0) for c in content_list),
+                    "total_shares": sum(c.get("shares", 0) for c in content_list)
+                }
+            },
+            "content": content_list
+        }
+    except Exception as e:
+        print(f"Error in engagement report: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve engagement report: {str(e)}")
+
+
+@app.get("/api/v1/engagement/{session_id}")
+async def get_session_engagement(session_id: str):
+    """
+    Get detailed engagement data for a specific published content
+    """
+    from services.engagement_analytics import get_content_engagement
+    
+    try:
+        result = get_content_engagement(session_id)
+        
+        if "error" in result:
+            raise HTTPException(status_code=404, detail=result["error"])
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve engagement data: {str(e)}")
+
+
 # ============================================
 # BACKGROUND TASKS
 # ============================================
@@ -509,7 +579,7 @@ async def run_workflow_async(session_id: str, initial_state: Dict[str, Any]):
         primary_url = (
             safe_state.get("published_url")
             or (publish_results[0].get("url") if publish_results else "")
-            or f"https://cms.brandguard.ai/published/{safe_state.get('target_channel','channel').lower()}/{session_id[:8]}"
+            or f"https://cms.prism-ai.io/published/{safe_state.get('target_channel','channel').lower()}/{session_id[:8]}"
         )
         if not publish_results and not paused_at_approval:
             publish_results = [{"channel": safe_state.get("target_channel", "channel"), "status": "SUCCESS", "url": primary_url}]
@@ -583,7 +653,7 @@ async def system_info():
     Get system information and capabilities
     """
     return {
-        "system": "BrandGuard AI - Enterprise Content Operations",
+        "system": "Prism AI - Enterprise Content Operations",
         "version": "1.0.0",
         "capabilities": [
             "Content generation via LLM",

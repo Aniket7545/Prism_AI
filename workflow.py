@@ -7,6 +7,7 @@ from agents.compliance_agent import compliance_agent
 from agents.localization_agent import localization_agent
 from agents.publish_agent import publish_agent
 from agents.analytics_agent import analytics_agent
+from agents.engagement_agent import engagement_agent
 from services.database import audit_db
 from langgraph.checkpoint.memory import MemorySaver
 import time
@@ -21,6 +22,7 @@ def create_workflow():
     workflow.add_node("localize", localization_agent)
     workflow.add_node("publish", publish_agent)
     workflow.add_node("analytics", analytics_agent)
+    workflow.add_node("engagement", engagement_agent)
     
     # Human gate node - waits for approval before proceeding
     def human_gate(state):
@@ -96,7 +98,8 @@ def create_workflow():
     
     workflow.add_conditional_edges("human_gate", route_after_human)
     workflow.add_edge("publish", "analytics")
-    workflow.add_edge("analytics", END)
+    workflow.add_edge("analytics", "engagement")
+    workflow.add_edge("engagement", END)
     
     # Compile with memory checkpointer
     memory = MemorySaver()

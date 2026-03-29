@@ -199,8 +199,13 @@ def generate_insights(engagement_data: dict, analysis: dict, content: str) -> di
     warnings = []
     opportunities = []
     
+    # Calculate engagement rate if not present
+    engagement_rate = engagement_data.get("engagement_rate", 0)
+    if not engagement_rate and "views" in engagement_data and "engagements" in engagement_data:
+        engagement_rate = (engagement_data.get("engagements", 0) / max(engagement_data.get("views", 1), 1)) * 100
+    
     # Recommendations based on engagement
-    if engagement_data["engagement_rate"] < 3:
+    if engagement_rate < 3:
         recommendations.append("Low engagement rate - consider more engaging headlines or CTAs")
         recommendations.append("Add more value-driven content or case studies")
     

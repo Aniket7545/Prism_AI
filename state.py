@@ -2,7 +2,7 @@ from typing import TypedDict, List, Dict, Any
 
 class ContentState(TypedDict):
     """
-    Complete state management for BrandGuard AI content workflow
+    Complete state management for Prism AI content workflow
     Tracks all data through the 6-agent pipeline
     """
     # Essential identifiers

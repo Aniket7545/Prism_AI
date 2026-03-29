@@ -12,7 +12,7 @@ import hashlib
 from services.integrations import publish_via_n8n, notify_slack_via_n8n, post_to_discord
 
 # Demo base URL for synthetic publish links
-DEMO_PUBLISH_BASE = os.getenv("DEMO_PUBLISH_BASE", "https://demo.brandguard.ai/published")
+DEMO_PUBLISH_BASE = os.getenv("DEMO_PUBLISH_BASE", "https://demo.prism-ai.io/published")
 USE_SOCIAL_DEMO = os.getenv("USE_SOCIAL_DEMO", "true").lower() == "true"
 ENABLE_DISCORD = os.getenv("ENABLE_DISCORD", "false").lower() == "true"
 
@@ -23,7 +23,7 @@ class PublishingChannels:
         "Blog": {
             "path": "published_content/blog",
             "format": "markdown",
-            "template": "# {title}\n\n**Published:** {date}\n**Author:** BrandGuard AI\n\n{content}"
+            "template": "# {title}\n\n**Published:** {date}\n**Author:** Prism AI\n\n{content}"
         },
         "Email": {
             "path": "published_content/email",

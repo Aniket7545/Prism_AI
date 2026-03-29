@@ -89,16 +89,51 @@ def notify_slack_via_n8n(session_id: str, summary: str, details: Optional[Dict[s
 
 
 def post_to_discord(session_id: str, topic: str, content: str, url: str = "") -> Dict[str, Any]:
-    """Send a message to Discord via webhook."""
+    """Send a message to Discord via webhook using embeds for better formatting."""
     if not ENABLE_DISCORD:
         return {"status": "disabled", "reason": "ENABLE_DISCORD=false"}
     if not DISCORD_WEBHOOK:
         return {"status": "error", "error": "Missing DISCORD_WEBHOOK"}
-    content_preview = content[:400] + ("..." if len(content) > 400 else "")
+    
+    # Extract title from content if it starts with markdown heading (# or ##)
+    lines = content.split('\n')
+    
+    # Check for proper markdown heading (# or ##)
+    is_heading = lines and lines[0].startswith(('#', '- **'))
+    if is_heading and lines[0].startswith('#'):
+        # Extract title from markdown heading, removing # characters
+        title = lines[0].replace('#', '').strip()
+        body = '\n'.join(lines[1:]).strip()
+    elif is_heading and lines[0].startswith('- **'):
+        # Handle bullet point with bold (sometimes used as title)
+        title = lines[0].replace('- ', '').replace('**', '').strip()
+        body = '\n'.join(lines[1:]).strip()
+    else:
+        # No proper heading found, use topic and keep full content
+        title = topic
+        body = content
+    
+    # Truncate description to 4096 characters (Discord embed limit)
+    description = body[:4096] if len(body) > 4096 else body
+    if len(body) > 4096:
+        description = description.rsplit('\n', 1)[0] + "\n\n[Content truncated - see full article for complete text]"
+    
+    # Use Discord embed for better formatting and larger content support
     payload = {
-        "content": f"**{topic}**\n\n{content_preview}" + (f"\n\n📎 Full article: {url}" if url else ""),
-        "username": "BrandGuard AI",
+        "username": "Prism AI",
+        "embeds": [
+            {
+                "title": title,
+                "description": description,
+                "color": 3447003,  # Blue
+                "url": url if url else None,
+                "footer": {
+                    "text": f"Published by Prism AI | Session: {session_id[:8]}"
+                }
+            }
+        ]
     }
+    
     try:
         resp = requests.post(DISCORD_WEBHOOK, json=payload, timeout=8)
         if 200 <= resp.status_code < 300:
