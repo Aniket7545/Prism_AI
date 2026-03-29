@@ -1,61 +1,76 @@
 # workflow.py
 from langgraph.graph import StateGraph, END
-from typing import TypedDict, List, Dict, Any
+from state import ContentState
+from agents.intake_agent import intake_agent
 from agents.drafting_agent import drafting_agent
 from agents.compliance_agent import compliance_agent
 from agents.localization_agent import localization_agent
-from datetime import datetime
-
-# Define State
-class AgentState(TypedDict):
-    input_topic: str
-    input_raw_data: str
-    target_channel: str
-    target_audience: str
-    target_region: str
-    draft_content: str
-    compliance_report: Dict
-    needs_revision: bool
-    audit_log: List[Dict]
-    iteration_count: int
-    start_time: float
-    end_time: float
-
-# Human Approval Node (Interrupt)
-def human_approval(state):
-    print("\n--- ⏸️ HUMAN APPROVAL GATE ---")
-    print("Workflow paused for human review.")
-    print(f"Compliance Status: {state['compliance_report'].get('passed')}")
-    # In real UI, this would wait for input. For CLI, we assume approved if passed.
-    return {"approval_status": "pending"}
+from agents.publish_agent import publish_agent
+from agents.analytics_agent import analytics_agent
+from services.database import audit_db
+from langgraph.checkpoint.memory import MemorySaver
 
 def create_workflow():
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(ContentState)
     
-    # Add Nodes
+    # Add all nodes
+    workflow.add_node("intake", intake_agent)
     workflow.add_node("draft", drafting_agent)
     workflow.add_node("compliance", compliance_agent)
     workflow.add_node("localize", localization_agent)
-    workflow.add_node("human_gate", human_approval)
+    workflow.add_node("publish", publish_agent)
+    workflow.add_node("analytics", analytics_agent)
     
-    # Edges
-    workflow.set_entry_point("draft")
-    workflow.add_edge("draft", "compliance")
+    # Human gate node
+    def human_gate(state):
+        audit_db.log_event(
+            state["session_id"], 
+            "System", 
+            "Human Gate", 
+            f"Approval: {state.get('human_approval', 'pending')}", 
+            "Pending", 
+            "Paused", 
+            {"iteration": state.get("iteration_count", 0)}
+        )
+        return state
     
-    # Conditional Edge: Compliance Check
+    workflow.add_node("human_gate", human_gate)
+    
+    # Set entry point
+    workflow.set_entry_point("intake")
+    
+    # Build edges - Sequential flow with features
+    workflow.add_edge("intake", "draft")
+    
     def route_after_compliance(state):
-        if state.get("needs_revision", False) and state.get("iteration_count", 0) < 3:
-            return "draft" # Loop back to drafting
+        if state.get("needs_revision", False) and state.get("iteration_count", 0) < 5:
+            return "draft"
         elif state.get("needs_revision", False):
-            return "human_gate" # Escalate to human if auto-fix fails
+            return "human_gate"
         else:
-            return "localize" # Proceed if compliant
-            
+            return "localize"
+    
+    workflow.add_edge("draft", "compliance")
     workflow.add_conditional_edges("compliance", route_after_compliance)
-    
     workflow.add_edge("localize", "human_gate")
-    workflow.add_edge("human_gate", END)
     
-    # Compile with interrupt_before for Human-in-the-Loop
-    app = workflow.compile(interrupt_before=["human_gate"])
+    def route_after_human(state):
+        approval = state.get("human_approval", "")
+        
+        if approval == "approved":
+            return "publish"
+        elif approval == "rejected":
+            # Reset needs_revision for the new draft cycle
+            return "draft"
+        else:
+            # Stay at human_gate if no decision yet
+            return "human_gate"
+    
+    workflow.add_conditional_edges("human_gate", route_after_human)
+    workflow.add_edge("publish", "analytics")
+    workflow.add_edge("analytics", END)
+    
+    # Compile with memory
+    memory = MemorySaver()
+    app = workflow.compile(checkpointer=memory, interrupt_before=["human_gate"])
     return app

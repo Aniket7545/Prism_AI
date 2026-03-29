@@ -1,53 +1,60 @@
-# run.py
 from workflow import create_workflow
+from utils.loaders import extract_text_from_file
 from datetime import datetime
-import json
+import time, uuid, os
 
 def run_demo():
     print("🚀 Starting Enterprise Content Workflow...")
     app = create_workflow()
     
+    # Create a dummy text file for testing if none exists
+    test_file = "./data/inputs/test_input.txt"
+    os.makedirs("./data/inputs", exist_ok=True)
+    if not os.path.exists(test_file):
+        with open(test_file, "w") as f:
+            f.write("Revenue grew 20%. We guarantee risk-free returns for investors.")
+    
     initial_state = {
-        "input_topic": "Q3 Financial Results",
-        "input_raw_data": "Revenue up 15%, profit margin improved.",
+        "session_id": str(uuid.uuid4()),
+        "input_file_path": test_file,
+        "raw_content": extract_text_from_file(test_file),
+        "topic": "Investment Update",
         "target_channel": "LinkedIn",
-        "target_audience": "Investors",
         "target_region": "India",
         "draft_content": "",
         "compliance_report": {},
-        "needs_revision": False,
+        "localization_content": "",
+        "published_url": "",
         "audit_log": [],
         "iteration_count": 0,
-        "start_time": datetime.now().timestamp(),
+        "human_approval": "pending",
+        "human_feedback": "",
+        "needs_revision": False,
+        "start_time": time.time(),
         "end_time": 0
     }
     
+    config = {"configurable": {"thread_id": initial_state["session_id"]}}
+    
     try:
-        # Invoke the workflow
-        config = {"configurable": {"thread_id": "demo_session_1"}}
+        # Run until interrupt
         result = app.invoke(initial_state, config=config)
+        print("\n⏸️ Workflow paused for Human Approval.")
+        print(f"Compliance Report: {result['compliance_report']}")
         
-        result["end_time"] = datetime.now().timestamp()
-        duration = result["end_time"] - result["start_time"]
+        # Simulate Human Approval
+        input("\nPress Enter to Approve & Publish...")
         
-        print("\n" + "="*50)
-        print("✅ WORKFLOW COMPLETED")
-        print("="*50)
-        print(f"⏱️ Total Time: {duration:.2f} seconds")
-        print(f"🔄 Draft Iterations: {result['iteration_count']}")
-        print(f"🛡️ Compliance Risk: {result['compliance_report'].get('risk_level')}")
-        print(f"\n📝 FINAL CONTENT:\n{result['draft_content'][:500]}...")
-        print(f"\n📋 AUDIT LOG_ENTRIES: {len(result['audit_log'])}")
+        result["human_approval"] = "approved"
+        final_result = app.invoke(None, config=config)
+        final_result["end_time"] = time.time()
         
-        # Save audit log to file for proof
-        with open("audit_log.json", "w") as f:
-            json.dump(result['audit_log'], f, indent=2)
-        print("\n💾 Audit log saved to audit_log.json")
+        print("\n✅ Workflow Completed.")
+        print(f"Published URL: {final_result.get('published_url')}")
+        print(f"Duration: {final_result['end_time'] - final_result['start_time']:.2f}s")
         
     except Exception as e:
-        print(f"❌ Workflow Error: {e}")
-        # Fallback for demo continuity
-        print("Continuing with available state...")
+        print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
     run_demo()

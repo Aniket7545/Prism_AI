@@ -58,3 +58,9 @@ Thumbs.db
 # Large Data Files (if any)
 data/raw/*
 !data/raw/.gitkeep
+data
+chroma_db
+
+
+*.md
+md
